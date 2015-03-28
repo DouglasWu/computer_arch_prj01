@@ -37,14 +37,20 @@
 #define J 0x02
 #define JAL 0x03
 
-unsigned int imem[1000];
-unsigned int dimg[1000];
-unsigned int dmem[1000];
-int sp;
-int imem_len;
+#define MEM_SIZE 1000
 
+unsigned int imem[MEM_SIZE];
+unsigned int dimg[MEM_SIZE];
+unsigned int dmem[MEM_SIZE];
+unsigned int sp;
+unsigned int iSize, dSize;
 unsigned int reg[32];
 unsigned int PC, cycle;
+unsigned int PC_init;
+bool pcChanged;
+
+FILE *snapshot, *error_dump;
+
 bool load_image(void);
 void init(void);
 void print_cycle(void);
@@ -58,13 +64,16 @@ int main()
         return 0;
     }
     init();
+
     cycle = 0;
-    int i = 2;
-   // puts("");
-    printf("%d\n",imem[1]);
-    while(i < imem_len + 2){
+    PC = PC_init;
+    print_cycle();
+    int i = 0;
+    while( imem[i] != HALT ){
        // printf("0x%08x\n",imem[i]);
+
         int opcode;
+        pcChanged = false;
         opcode = imem[i] >> 26;
         printf("%08x  0x%02x ",imem[i], opcode);
         if(opcode==0x00)
@@ -75,15 +84,28 @@ int main()
         else{
             I_type(imem[i]);
         }
+        if(!pcChanged)
+            PC = PC + 4;
 
-
-        i++;
+        cycle++;
+        print_cycle();
+        i = (PC-PC_init)/4;
+       // printf("i: %d\n",i);
+        //system("pause");
     }
 
-    /*unsigned int a = 0x00001235, b = 0xffffffff;
-    printf("0x%08x\n",a+b);*/
+
+    fclose(snapshot);
+    fclose(error_dump);
 
     return 0;
+}
+void print_cycle(void)
+{
+    fprintf(snapshot, "cycle %d\n",cycle);
+    for(int i=0; i<32; i++)
+        fprintf(snapshot, "$%02d: 0x%08X\n",i,reg[i]);
+    fprintf(snapshot,"PC: 0x%08X\n\n\n",PC);
 }
 void R_type(unsigned int instr)
 {
@@ -130,41 +152,101 @@ void R_type(unsigned int instr)
         puts("sra"); break;
     case JR:
         PC = reg[rs];
-        puts("jr"); break;
+        pcChanged = true;
+        puts("jr");
+        printf("rs: %d, reg[rs]:%08x\n", rs, reg[rs]);
+        break;
     default:
         puts("decode fail!");
     }
-    printf("%d %d %d\n",rs, rt, rd, C);
+    //printf("%d %d %d\n",rs, rt, rd, C);
 }
 void I_type(unsigned int instr)
 {
     int opcode = instr >> 26;
-    unsigned int rs, rt, uC;
-    int sC;
-    rs = (instr<<6) >>27;
-    rt = (instr<<11)>>27;
-    uC  = (instr<<16)>>16;
-    sC = ((int)(instr<<16))>>16;
+    unsigned int rs = (instr<<6) >>27;
+    unsigned int rt = (instr<<11)>>27;
+    unsigned int uC  = (instr<<16)>>16;
+    int sC = ((int)(instr<<16))>>16;
+    unsigned int addr = reg[rs] + sC;/**handle memory addr overflow*/
+    unsigned int masks[4] = {0xffffff00, 0xffff00ff, 0xff00ffff, 0x00ffffff};
+    int shift, save, tmp;
+    unsigned int tmpu;
+
 
     switch(opcode){
     case ADDI:
         reg[rt] = reg[rs] + sC;
         puts("addi"); break;
+
     case LW:
+        if( addr%4 != 0 ){
+            /**error handle*/
+            puts("memory aligned error!!");
+        }else{
+            reg[rt] = dmem[addr/4];
+        }
         puts("lw"); break;
-    case LH:
+    case LH: //signed
+        if( addr%2 != 0 ){
+            /**error handle*/
+            puts("memory aligned error!!");
+        }else{
+            int tmp = dmem[addr/4];
+            reg[rt] = addr%4==0 ? (tmp<<16)>>16 : tmp>>16;
+        }
         puts("lh"); break;
     case LHU:
+        if( addr%2 != 0 ){
+            /**error handle*/
+            puts("memory aligned error!!");
+        }else{
+            unsigned int tmp = dmem[addr/4];
+            reg[rt] = addr%4==0 ? (tmp<<16)>>16 : tmp>>16;
+        }
         puts("lhu"); break;
     case LB:
+        tmp = dmem[addr/4];
+        shift = 24 - (addr%4)*8;
+        reg[rt] = (tmp << shift) >> 24;
+
         puts("lb"); break;
     case LBU:
+        tmpu = dmem[addr/4];
+        shift = 24 - (addr%4)*8;
+        reg[rt] = (tmpu << shift) >> 24;
+
         puts("lbu"); break;
     case SW:
+        if( addr%4 != 0 ){
+            /**error handle*/
+            puts("memory aligned error!!");
+        }else{
+            dmem[addr/4] = reg[rt];
+        }
+
         puts("sw"); break;
     case SH:
+        if( addr%2 != 0 ){
+            /**error handle*/
+            puts("memory aligned error!!");
+        }else{
+            tmpu = dmem[addr/4];
+            save = reg[rt] & 0x0000ffff;
+            if(addr%4==0){
+                dmem[addr/4] = ((tmpu>>16)<<16) + save;
+            }else{
+                dmem[addr/4] = (tmpu&0x0000ffff) + (save<<16);
+            }
+        }
+
         puts("sh"); break;
     case SB:
+        tmpu = dmem[addr/4];
+        save = reg[rt] & 0x000000ff;
+        shift = (addr%4)*8;
+        dmem[addr/4] = (tmpu & masks[addr%4]) + (save<<shift);
+
         puts("sb"); break;
 
     case LUI:
@@ -184,9 +266,23 @@ void I_type(unsigned int instr)
         puts("slti"); break;
 
     case BEQ:
-        puts("beq"); break;
+        if(reg[rs]==reg[rt]){
+            PC = (PC+4) + sC*4;
+            pcChanged = true;
+        }
+
+        puts("beq");
+        break;
     case BNE:
-        puts("bne"); break;
+        if(reg[rs]!=reg[rt]){
+            printf("");
+            PC = (PC+4) + sC*4;
+            pcChanged = true;
+        }
+        puts("bne");
+
+        //printf("%d %d %x\n",rs, rt, sC);
+        break;
     default:
         puts("decode fail!");
     }
@@ -194,44 +290,62 @@ void I_type(unsigned int instr)
 void J_type(unsigned int instr)
 {
     int opcode = instr >> 26;
-    switch(opcode){
-    case J:
-        puts("j"); break;
-    case JAL:
-        puts("jal"); break;
-    default:
-        puts("decode fail!");
+    unsigned int C = (instr<<6)>>6;
+
+
+    if(opcode == JAL){
+        reg[31] = PC + 4;
+        puts("jal");
     }
+    else puts("j");
+    PC = ((PC+4) & 0xf0000000) | (C*4);
+    pcChanged = true;
 }
 void init(void)
 {
     for(int i=0; i<32; i++)
         reg[i] = ZERO;
-    reg[29] = dimg[0];
-    sp = reg[29]/4;
+    reg[29] = sp;
 
-    PC = imem[0];
-    imem_len = imem[1];
+    snapshot = fopen("snapshot.rpt", "w");
+    error_dump = fopen("error_dump.rpt", "w");
 }
 bool load_image(void)
 {
-    FILE *fi = fopen("open_testcase\\func\\iimage.bin", "rb");
-    FILE *fd = fopen("open_testcase\\func\\dimage.bin", "rb");
+    FILE *fi = fopen("open_testcase\\recur\\iimage.bin", "rb");
+    FILE *fd = fopen("open_testcase\\recur\\dimage.bin", "rb");
     if(!fi || !fd) return false;
 
     unsigned char bytes[4];
     int i = 0;
     while( fread(bytes, 4, 1, fi) != 0 ){
-        imem[i] = bytes[3] | (bytes[2]<<8) | (bytes[1]<<16) | (bytes[0]<<24);
-        //printf("%08x \n", imem[i]);
-       i++;
+        if(i==0){
+            PC_init = bytes[3] | (bytes[2]<<8) | (bytes[1]<<16) | (bytes[0]<<24);
+        }
+        else if(i==1){
+            iSize = bytes[3] | (bytes[2]<<8) | (bytes[1]<<16) | (bytes[0]<<24);
+        }
+        else{
+            imem[i-2] = bytes[3] | (bytes[2]<<8) | (bytes[1]<<16) | (bytes[0]<<24);
+            printf("%08x \n", imem[i-2]);
+        }
+
+        i++;
     }
-  //  puts("");
+    puts("");
     i = 0;
     while( fread(bytes, 4, 1, fd) != 0 ){
-        dimg[i] = bytes[3] | (bytes[2]<<8) | (bytes[1]<<16) | (bytes[0]<<24);
-       // printf("%08x \n", dimg[i]);
-       i++;
+        if(i==0){
+            sp = bytes[3] | (bytes[2]<<8) | (bytes[1]<<16) | (bytes[0]<<24);
+        }
+        else if(i==1){
+            dSize = bytes[3] | (bytes[2]<<8) | (bytes[1]<<16) | (bytes[0]<<24);
+        }
+        else{
+            dmem[i-2] = bytes[3] | (bytes[2]<<8) | (bytes[1]<<16) | (bytes[0]<<24);
+            printf("%08x \n", dmem[i-2]);
+        }
+        i++;
     }
     fclose(fi);
     fclose(fd);

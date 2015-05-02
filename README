@@ -1,0 +1,13 @@
+This is the first project of the course Computer Architecture (10320CS410001)
+done by the student 102062202.
+This program is a single-cycle, functional processor simulator based on MIPS ISA.
+
+To run this program, build the simulation environment by running:
+
+make
+
+To erase the files built by make all, run:
+
+make clean
+
+

@@ -1,0 +1,29 @@
+# depslib dependency file v1.0
+1428694741 source:c:\users\douglas\documents\nthu\計算機結構\project1\project\archi01\main.cpp
+	<stdio.h>
+	<stdlib.h>
+	<string.h>
+	"instruction.h"
+	"parameter.h"
+
+1430574124 source:c:\users\douglas\documents\nthu\計算機結構\project1\project\archi01\error.cpp
+	<stdio.h>
+	<stdlib.h>
+	<string.h>
+	"parameter.h"
+	"error.h"
+
+1428035341 c:\users\douglas\documents\nthu\計算機結構\project1\project\archi01\parameter.h
+
+1430573915 c:\users\douglas\documents\nthu\計算機結構\project1\project\archi01\error.h
+
+1428053242 c:\users\douglas\documents\nthu\計算機結構\project1\project\archi01\instruction.h
+
+1430574142 source:c:\users\douglas\documents\nthu\計算機結構\project1\project\archi01\instruction.cpp
+	<stdio.h>
+	<stdlib.h>
+	<string.h>
+	"parameter.h"
+	"error.h"
+	"instruction.h"
+

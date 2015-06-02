@@ -30,7 +30,7 @@ int main()
     error_halt = false;
     print_cycle();
     int i = PC/4;
-    while( imem[i] != HALT && i < MEM_SIZE/4){
+    while( (imem[i]>>26) != HALT && i < MEM_SIZE/4){
        // printf("0x%08x\n",imem[i]);
         int opcode = imem[i] >> 26;
         pcChanged = false;

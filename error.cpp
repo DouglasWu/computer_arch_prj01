@@ -6,13 +6,13 @@
 
 bool is_nop(unsigned int instr)
 {
+    int opcode = instr >> 26;
     int funct = ( instr << 26 ) >> 26;
-    unsigned int rs = (instr<<6) >>27;
     unsigned int rt = (instr<<11)>>27;
     unsigned int rd = (instr<<16)>>27;
     unsigned int C  = (instr<<21)>>27;
 
-    return funct==SLL && rt==0 && rd==0 && C==0;
+    return opcode==0x00 && funct==SLL && rt==0 && rd==0 && C==0;
 }
 void print_error(int type, int cyc)
 {

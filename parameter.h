@@ -34,7 +34,7 @@
 #define J 0x02
 #define JAL 0x03
 
-#define HALT 0xffffffff
+#define HALT 0x3f
 #define ZERO 0x00000000
 
 #define MEM_SIZE 1024
